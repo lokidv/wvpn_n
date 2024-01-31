@@ -1,6 +1,6 @@
 
 ```
-sudo apt update && upgrade -y
+sudo apt update && apt upgrade -y
 
 
 curl -O https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh
