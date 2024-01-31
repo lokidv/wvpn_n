@@ -3,15 +3,7 @@
 sudo apt update && apt upgrade -y
 
 
-curl -O https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh
 
-
-chmod +x openvpn-install.sh
-
-
-./openvpn-install.sh
-
-git clone https://github.com/lokidv/oinstaller.git && mv oinstaller/* /root/ && chmod +x install.sh && chmod +x install2.sh
 
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl gnupg
@@ -23,10 +15,10 @@ sudo apt-get update
 sudo apt-get install nodejs -y
 
 
-sudo npm install pm2 -g
 
-git clone https://github.com/lokidv/ovpn.git
-mv ovpn/ /home
+
+git clone https://github.com/lokidv/wvpn.git
+mv wvpn/ /home
 cd /home
 mkdir bvpn
 mv ovpn/* bvpn/
