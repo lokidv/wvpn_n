@@ -47,6 +47,13 @@ WantedBy=multi-user.target
 systemctl enable --now wvpn.service 
 
 
+you should upload install file to server
+
+nano install.sh
+
+chmod +x install.sh
+./install.sh
+
 or
 
 
