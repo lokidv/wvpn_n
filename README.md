@@ -27,7 +27,8 @@ cd wvpn
 
 npm i
 
-
+chmod +x wireguard-install.sh
+./wireguard-install.sh
 nano /etc/systemd/system/wvpn.service
 
 [Unit]
