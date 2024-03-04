@@ -20,16 +20,15 @@ sudo apt-get install nodejs -y
 git clone https://github.com/lokidv/wvpn.git
 mv wvpn/ /home
 cd /home
-mkdir bvpn
-mv ovpn/* bvpn/
-rm -r ovpn/
+cd wvpn
 
 
-cd bvpn/
+
+
 npm i
-mv /root/openvpn-install.sh /home/bvpn/
 
-nano /etc/systemd/system/bvpn.service
+
+nano /etc/systemd/system/wvpn.service
 
 [Unit]
 Description=Tunnel WireGuard with udp2raw
@@ -38,7 +37,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=sudo node /home/bvpn/main.js
+ExecStart=sudo node /home/wvpn/main.js
 Restart=no
 
 [Install]
