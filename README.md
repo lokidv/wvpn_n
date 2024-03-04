@@ -44,7 +44,7 @@ Restart=no
 [Install]
 WantedBy=multi-user.target
 
-systemctl enable --now bvpn.service 
+systemctl enable --now wvpn.service 
 
 
 or
