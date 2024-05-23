@@ -46,7 +46,11 @@ async function startHttpServer() {
                         break;
                      case "list" :
                         await listUser(req, res, U.query);
-                        break;    
+                        break;
+
+                    case "check" :
+                        await checkToken(req,res,U.query);
+                        break; 
                     default :
                         logger.info("pathname not found !", U.pathname);
                 }
@@ -114,7 +118,15 @@ async function startHttpServer() {
     }
 
 
-
+async function checkToken(req,res,query){
+    // res.write('hello');
+    let file_is_exist = await  fs.existsSync("/root/wg0-client-"+query.publicKey+".conf")
+    if (file_is_exist){
+        await res.write('true')
+    }else{
+        await res.write('false')
+    }
+}
 
 async function addVpn(req, res, query){
 
