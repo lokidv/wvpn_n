@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# install_wire.sh  –  Full auto-installer for WireGuard + wvpn (Node.js 20)
+# install_wire.sh – Full auto-installer: WireGuard + Node.js 20 + wvpn
 # Tested on Ubuntu 22.04 (Jammy)
-# Log file: /var/log/wvpn_install.log
+# Log: /var/log/wvpn_install.log
 
 set -euo pipefail
 LOG="/var/log/wvpn_install.log"; touch "$LOG"
 
-# ─── Helper UI ─────────────────────────────────────────────────────────────────
+# ── UI helpers ────────────────────────────────────────────────────────────────
 green(){ echo -e "\e[32m$1\e[0m"; }
 red  (){ echo -e "\e[31m$1\e[0m"; }
 step (){ printf "%s ... " "$1" | tee -a "$LOG"; }
@@ -16,9 +16,12 @@ fail (){ red "❌"; exit 1; }
 ###############################################################################
 # 1. Base packages
 ###############################################################################
-step "Updating system"; sudo apt update >>"$LOG" 2>&1 && sudo apt upgrade -y >>"$LOG" 2>&1 && ok || fail
+step "Updating system"
+sudo apt update >>"$LOG" 2>&1 && sudo apt upgrade -y >>"$LOG" 2>&1 && ok || fail
+
 for pkg in nano cron git ca-certificates curl gnupg; do
-  step "Installing $pkg"; sudo apt-get install -y "$pkg" >>"$LOG" 2>&1 && ok || fail
+  step "Installing $pkg"
+  sudo apt-get install -y "$pkg" >>"$LOG" 2>&1 && ok || fail
 done
 
 ###############################################################################
@@ -46,14 +49,17 @@ step "npm install"; sudo npm install >>"$LOG" 2>&1 && ok || fail
 step "chmod wireguard-install.sh"; sudo chmod +x /home/wvpn/wireguard-install.sh && ok
 
 ###############################################################################
-# 4. WireGuard – deterministic install
+# 4. WireGuard deterministic install
 ###############################################################################
 step "Installing WireGuard pkgs"
 sudo apt-get install -y wireguard iptables resolvconf qrencode >>"$LOG" 2>&1 && ok || fail
 
 step "Generating keys"
-SERVER_PRIV_KEY=$(wg genkey); SERVER_PUB_KEY=$(echo "$SERVER_PRIV_KEY"|wg pubkey); ok
+SERVER_PRIV_KEY=$(wg genkey)
+SERVER_PUB_KEY=$(echo "$SERVER_PRIV_KEY" | wg pubkey)
+ok
 
+# Core parameters
 SERVER_PUB_IP=$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -1)
 SERVER_PUB_NIC=$(ip -4 route ls | awk '/default/ {print $5; exit}')
 SERVER_WG_NIC="wg0"
@@ -62,7 +68,25 @@ SERVER_PORT=$(shuf -i1500-10000 -n1)
 CLIENT_DNS_1="1.1.1.1"; CLIENT_DNS_2="1.0.0.1"
 ALLOWED_IPS="0.0.0.0/0"
 
-sudo mkdir -p /etc/wireguard && sudo chmod 600 -R /etc/wireguard
+# ── save params for compatibility with wireguard-install.sh ───────────────────
+PARAMS_FILE="/etc/wireguard/params"
+sudo mkdir -p /etc/wireguard
+sudo tee "$PARAMS_FILE" >/dev/null <<EOF
+SERVER_PUB_IP=${SERVER_PUB_IP}
+SERVER_PUB_NIC=${SERVER_PUB_NIC}
+SERVER_WG_NIC=${SERVER_WG_NIC}
+SERVER_WG_IPV4=${SERVER_WG_IPV4}
+SERVER_PORT=${SERVER_PORT}
+SERVER_PRIV_KEY=${SERVER_PRIV_KEY}
+SERVER_PUB_KEY=${SERVER_PUB_KEY}
+CLIENT_DNS_1=${CLIENT_DNS_1}
+CLIENT_DNS_2=${CLIENT_DNS_2}
+ALLOWED_IPS=${ALLOWED_IPS}
+EOF
+sudo chmod 600 "$PARAMS_FILE"
+
+# ── server config ────────────────────────────────────────────────────────────
+step "Creating server config"
 sudo tee /etc/wireguard/${SERVER_WG_NIC}.conf >/dev/null <<EOF
 [Interface]
 Address    = ${SERVER_WG_IPV4}/24
@@ -79,7 +103,7 @@ PostDown = iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT
 PostDown = iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
 EOF
 sudo chmod 600 /etc/wireguard/${SERVER_WG_NIC}.conf
-ok "Creating server config"
+ok
 
 step "Enable ip_forward"
 sudo sed -i 's/^#\?net.ipv4.ip_forward=.*/net.ipv4.ip_forward=1/' /etc/sysctl.d/99-sysctl.conf 2>/dev/null || true
@@ -131,14 +155,11 @@ PresharedKey = ${CLIENT_PSK}
 AllowedIPs   = ${CLIENT_WG_IPV4}/32
 EOF
 
-  # --- FIX: use temp file, not process-substitution ---
+  # apply change using temp file -> avoids fopen error
   TMP_CFG=$(mktemp)
   sudo wg-quick strip "${SERVER_WG_NIC}" > "$TMP_CFG"
-  if sudo wg syncconf "${SERVER_WG_NIC}" "$TMP_CFG" >>"$LOG" 2>&1; then
-    true
-  else
+  sudo wg syncconf "${SERVER_WG_NIC}" "$TMP_CFG" >>"$LOG" 2>&1 || \
     red "⚠️  wg syncconf failed – ignored" | tee -a "$LOG"
-  fi
   rm -f "$TMP_CFG"
 fi
 ok
@@ -161,7 +182,6 @@ Restart=no
 [Install]
 WantedBy=multi-user.target
 UNIT
-
 sudo systemctl daemon-reload
 sudo systemctl enable --now wvpn.service >>"$LOG" 2>&1 && ok || fail
 
@@ -171,7 +191,8 @@ sudo systemctl enable --now wvpn.service >>"$LOG" 2>&1 && ok || fail
 step "Adding cron watchdog"
 TMP=$(mktemp)
 sudo crontab -l 2>/dev/null >"$TMP" || true
-grep -q udp2raw.service "$TMP" || echo '* * * * * /bin/systemctl is-active --quiet udp2raw.service || /bin/systemctl restart udp2raw.service' >>"$TMP"
+grep -q udp2raw.service "$TMP" || \
+  echo '* * * * * /bin/systemctl is-active --quiet udp2raw.service || /bin/systemctl restart udp2raw.service' >>"$TMP"
 sudo crontab "$TMP"; rm "$TMP"
 ok
 
