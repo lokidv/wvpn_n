@@ -1,5 +1,8 @@
 
 ```
+recommand
+wget https://raw.githubusercontent.com/lokidv/wvpn/refs/heads/main/install_wire.sh && sudo chmod +x install_wire.sh && sudo ./install_wire.sh
+
 sudo apt update && apt upgrade -y
 
 
