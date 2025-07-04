@@ -31,7 +31,11 @@ install_udp2raw() {
 ###############################################################################
 sanitize_alias() {
   local raw="$1"
-  echo "$raw" | sed -E 's/^(tcp-)?(udp2raw-)?//' | sed -E 's/-?udp2raw$//'
+  # remove leading tcp-  or udp2raw-   and trailing -udp2raw
+  local mod="${raw#tcp-}"
+  mod="${mod#udp2raw-}"
+  mod="${mod%-udp2raw}"
+  echo "$mod"
 }
 
 list_services() {
@@ -95,7 +99,10 @@ create_service() {
 
   read -rp "Service alias (e.g. brave): " RAW_ALIAS
   SERVICE_ALIAS=$(sanitize_alias "$RAW_ALIAS")
-  SERVICE_NAME="tcp-${SERVICE_ALIAS}-udp2raw"
+  if [[ -z "$SERVICE_ALIAS" ]]; then
+    red "Alias cannot be empty after removing prefixes. Choose a different alias."; exit 1
+  fi
+  SERVICE_NAME=$(echo "tcp-${SERVICE_ALIAS}-udp2raw" | tr -s '-')
   SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
   if [[ "$MODE" == "1" ]]; then
