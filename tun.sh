@@ -1,68 +1,85 @@
 #!/usr/bin/env bash
-# udp2raw_setup.sh  –  Install & configure udp2raw + systemd service
-# Run as root:  chmod +x udp2raw_setup.sh && sudo ./udp2raw_setup.sh
-
+# udp2raw_setup.sh – install udp2raw (if missing) and create a systemd service
+# Tested on Ubuntu 20.04/22.04
 set -euo pipefail
 
 BIN_DIR="/usr/local/bin/udp2raw"
 BIN_FILE="${BIN_DIR}/udp2raw"
-SERVICE_FILE="/etc/systemd/system/tcp-udp2raw.service"
 
-green(){ echo -e "\e[32m$1\e[0m"; }
-red(){ echo -e "\e[31m$1\e[0m"; }
+green() { printf '\e[32m%s\e[0m\n' "$1"; }
+red()   { printf '\e[31m%s\e[0m\n' "$1"; }
 
+###############################################################################
+# 1. Install udp2raw if not present
+###############################################################################
 install_udp2raw() {
-  green "→ Installing udp2raw ..."
+  green "Installing udp2raw ..."
   apt update
   apt install -y git build-essential golang
 
-  TMP_DIR=$(mktemp -d)
-  git clone https://github.com/MikeWang000000/udp2raw.git "$TMP_DIR/udp2raw"
-  pushd "$TMP_DIR/udp2raw" >/dev/null
+  TMP=$(mktemp -d)
+  git clone https://github.com/MikeWang000000/udp2raw.git "$TMP/udp2raw"
+  pushd "$TMP/udp2raw" >/dev/null
   make
   popd >/dev/null
 
   mkdir -p "$BIN_DIR"
-  cp -r "$TMP_DIR/udp2raw"/* "$BIN_DIR/"
-  rm -rf "$TMP_DIR"
-  green "✅ udp2raw installed to $BIN_DIR"
+  cp -r "$TMP/udp2raw"/* "$BIN_DIR/"
+  rm -rf "$TMP"
+  green "udp2raw installed to $BIN_DIR"
 }
 
 [[ -x "$BIN_FILE" ]] || install_udp2raw
 
-echo
+###############################################################################
+# 2. Collect user inputs (English prompts)
+###############################################################################
 echo "------------------------------------------------------------"
-echo "  udp2raw Service Generator"
+echo "   udp2raw Service Generator"
 echo "------------------------------------------------------------"
-echo "1) سرور خارج (mode: server -s)"
-echo "2) سرور ایران  (mode: client -c)"
-read -rp "کدام را می‌خواهید پیکربندی کنید؟ (1/2) " MODE
+echo "1) Foreign server  (mode: server  -s)"
+echo "2) Iran    server  (mode: client  -c)"
+read -rp "Select configuration (1/2): " MODE
+
+read -rp "Service alias (e.g. brave): " SERVICE_ALIAS
+SERVICE_NAME="tcp-${SERVICE_ALIAS}-udp2raw"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 case "$MODE" in
   1)
-    read -rp "پورت سمت ایران (PORTIRAN): " PORT_IR
-    read -rp "پورت WireGuard در سرور (PORTWIRE): " PORT_WIRE
-    read -rp "دامنهٔ فیک (مثال: zar.tonmeme.app): " FAKE_DOMAIN
-    read -rp "حالت تونل (faketcp|udp|icmp): " TUNNEL_MODE
+    read -rp "Port that foreign server listens on (PORT_LISTEN): " PORT_LISTEN
+    read -rp "Local WireGuard port on foreign server (PORT_WIREGUARD): " PORT_WG
+    read -rp "Fake domain (example: brave.example.com): " FAKE_DOMAIN
+    read -rp "Tunnel mode (faketcp/udp/icmp): " TUNNEL_MODE
 
-    EXEC_CMD="${BIN_FILE} -s -l0.0.0.0:${PORT_IR} -r 127.0.0.1:${PORT_WIRE} -k \"Aa@!123456\" --raw-mode ${TUNNEL_MODE} --fake-http ${FAKE_DOMAIN} --cipher-mode aes128cbc --auth-mode hmac_sha1 --seq-mode 2"
+    EXEC_CMD="${BIN_FILE} -s -l0.0.0.0:${PORT_LISTEN} -r 127.0.0.1:${PORT_WG} \
+-k \"Aa@!123456\" --raw-mode ${TUNNEL_MODE} --fake-http ${FAKE_DOMAIN} \
+--cipher-mode aes128cbc --auth-mode hmac_sha1 --seq-mode 2"
     ;;
   2)
-    read -rp "پورت لوکال در ایران (IRANPORT): " PORT_IR
-    read -rp "IP سرور خارج (KHAREJIP): " KHAREJ_IP
-    read -rp "پورت udp2raw سرور خارج (KHAREJPORT): " KHAREJ_PORT
-    read -rp "دامنهٔ فیک (مثال: zar.tonmeme.app): " FAKE_DOMAIN
-    read -rp "حالت تونل (faketcp|udp|icmp): " TUNNEL_MODE
+    read -rp "Local port in Iran (IRAN_PORT): " IRAN_PORT
+    read -rp "Public IP of foreign server (FOREIGN_IP): " FOREIGN_IP
+    read -rp "udp2raw port on foreign server (FOREIGN_PORT): " FOREIGN_PORT
+    read -rp "Fake domain (example: brave.example.com): " FAKE_DOMAIN
+    read -rp "Tunnel mode (faketcp/udp/icmp): " TUNNEL_MODE
 
-    EXEC_CMD="${BIN_FILE} -c -l0.0.0.0:${PORT_IR} -r\"${KHAREJ_IP}\":${KHAREJ_PORT} -k \"Aa@!123456\" --raw-mode ${TUNNEL_MODE} --fake-http tcp-${FAKE_DOMAIN} --cipher-mode aes128cbc --auth-mode hmac_sha1 --seq-mode 2"
+    # Ensure prefix “tcp-” appears exactly once
+    [[ "${FAKE_DOMAIN}" == tcp-* ]] && FAKE_STR="${FAKE_DOMAIN}" || FAKE_STR="tcp-${FAKE_DOMAIN}"
+
+    EXEC_CMD="${BIN_FILE} -c -l0.0.0.0:${IRAN_PORT} -r\"${FOREIGN_IP}\":${FOREIGN_PORT} \
+-k \"Aa@!123456\" --raw-mode ${TUNNEL_MODE} --fake-http ${FAKE_STR} \
+--cipher-mode aes128cbc --auth-mode hmac_sha1 --seq-mode 2"
     ;;
   *)
-    red "گزینهٔ نامعتبر!"; exit 1 ;;
+    red "Invalid selection"; exit 1 ;;
 esac
 
-cat > "$SERVICE_FILE" <<EOF
+###############################################################################
+# 3. Create & start systemd unit
+###############################################################################
+cat > "${SERVICE_FILE}" <<EOF
 [Unit]
-Description=Tunnel WireGuard with udp2raw
+Description=udp2raw tunnel (${SERVICE_ALIAS})
 After=network.target
 
 [Service]
@@ -76,7 +93,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now tcp-udp2raw.service
+systemctl enable --now "${SERVICE_NAME}.service"
 
-green "✅ سرویس tcp-udp2raw.service ساخته و اجرا شد!"
-systemctl status tcp-udp2raw.service --no-pager
+green "Service ${SERVICE_NAME}.service created and started."
+systemctl status "${SERVICE_NAME}.service" --no-pager
