@@ -66,8 +66,10 @@ case "$MODE" in
     read -rp "Tunnel mode (faketcp/udp/icmp): " TUNNEL_MODE
 
     [[ $FAKE_DOMAIN == tcp-* ]] && FAKE_DOM=$FAKE_DOMAIN || FAKE_DOM="tcp-${FAKE_DOMAIN}"
-    EXEC_CMD="${BIN_FILE} -c -l0.0.0.0:${IRAN_PORT} \
--r\"${FOREIGN_IP}\":${FOREIGN_PORT} -k \"Aa@!123456\" \
+
+    # swap ports: listen on FOREIGN_PORT, connect to IP:IRAN_PORT
+    EXEC_CMD="${BIN_FILE} -c -l0.0.0.0:${FOREIGN_PORT} \
+-r\"${FOREIGN_IP}\":${IRAN_PORT} -k \"Aa@!123456\" \
 --raw-mode ${TUNNEL_MODE} --fake-http ${FAKE_DOM} \
 --cipher-mode aes128cbc --auth-mode hmac_sha1 --seq-mode 2"
     ;;
