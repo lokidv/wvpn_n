@@ -31,10 +31,9 @@ install_udp2raw() {
 ###############################################################################
 sanitize_alias() {
   local raw="$1"
-  # remove leading tcp-  or udp2raw-   and trailing -udp2raw
-  local mod="${raw#tcp-}"
-  mod="${mod#udp2raw-}"
-  mod="${mod%-udp2raw}"
+  local mod="${raw#tcp-}"        # remove leading tcp-
+  mod="${mod#udp2raw-}"          # remove leading udp2raw-
+  mod="${mod%-udp2raw}"          # remove trailing -udp2raw
   echo "$mod"
 }
 
@@ -45,9 +44,7 @@ list_services() {
   for i in "${!SVCS[@]}"; do printf "%2s) %s\n" $((i+1)) "$(basename "${SVCS[$i]}")"; done
 }
 
-update_execstart() {
-  sed -i "s|^ExecStart=.*|ExecStart=$2|" "$1"
-}
+update_execstart() { sed -i "s|^ExecStart=.*|ExecStart=$2|" "$1"; }
 
 ###############################################################################
 # 2. Modify existing service
@@ -65,16 +62,25 @@ modify_service() {
   NEW_MODE=${NEW_MODE,,}
 
   if [[ "$NEW_MODE" == "icmp" ]]; then
-    new=$(echo "$cur" | sed -E 's/--raw-mode[ ]+[a-z]+/--raw-mode icmp/' \
-                           | sed -E 's/[ ]*--fake-http[ ]+[^ ]+//')
+    new=$(echo "$cur" \
+            | sed -E 's/--raw-mode[ ]+[a-z]+/--raw-mode icmp/' \
+            | sed -E 's/[ ]*--fake-http[ ]+[^ ]+//' \
+            | sed -E 's/[ ]*--seq-mode[ ]+[0-9]+//')
   else
     read -rp "Fake domain (e.g. brave.example.com): " NEW_D
     [[ "$cur" =~ ' -c ' ]] && [[ $NEW_D != tcp-* ]] && NEW_D="tcp-${NEW_D}"
-    new=$(echo "$cur" | sed -E "s/--raw-mode[ ]+[a-z]+/--raw-mode ${NEW_MODE}/")
+    new=$(echo "$cur" \
+            | sed -E "s/--raw-mode[ ]+[a-z]+/--raw-mode ${NEW_MODE}/")
     if echo "$new" | grep -q -- '--fake-http'; then
       new=$(echo "$new" | sed -E "s/--fake-http[ ]+[^ ]+/--fake-http ${NEW_D}/")
     else
       new="$new --fake-http ${NEW_D}"
+    fi
+    # ensure --seq-mode 2 present only for faketcp
+    if [[ "$NEW_MODE" == "faketcp" ]]; then
+      echo "$new" | grep -q -- '--seq-mode' || new="$new --seq-mode 2"
+    else
+      new=$(echo "$new" | sed -E 's/[ ]*--seq-mode[ ]+[0-9]+//')
     fi
   fi
 
@@ -99,9 +105,7 @@ create_service() {
 
   read -rp "Service alias (e.g. brave): " RAW_ALIAS
   SERVICE_ALIAS=$(sanitize_alias "$RAW_ALIAS")
-  if [[ -z "$SERVICE_ALIAS" ]]; then
-    red "Alias cannot be empty after removing prefixes. Choose a different alias."; exit 1
-  fi
+  [[ -n "$SERVICE_ALIAS" ]] || { red "Alias cannot be empty."; exit 1; }
   SERVICE_NAME=$(echo "tcp-${SERVICE_ALIAS}-udp2raw" | tr -s '-')
   SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
@@ -118,6 +122,7 @@ create_service() {
     EXEC_CMD="${BIN_FILE} -s -l0.0.0.0:${PORT_LISTEN} -r127.0.0.1:${PORT_WG} \
 -k \"Aa@!123456\" --raw-mode ${TUNNEL_MODE} ${FAKE_ARG} \
 --cipher-mode aes128cbc --auth-mode hmac_sha1"
+    [[ "$TUNNEL_MODE" == "faketcp" ]] && EXEC_CMD+=" --seq-mode 2"
   elif [[ "$MODE" == "2" ]]; then
     read -rp "Local port in Iran (IRAN_PORT): " IRAN_PORT
     read -rp "Foreign server IP (FOREIGN_IP): " FOREIGN_IP
@@ -133,6 +138,7 @@ create_service() {
     EXEC_CMD="${BIN_FILE} -c -l0.0.0.0:${FOREIGN_PORT} -r\"${FOREIGN_IP}\":${IRAN_PORT} \
 -k \"Aa@!123456\" --raw-mode ${TUNNEL_MODE} ${FAKE_ARG} \
 --cipher-mode aes128cbc --auth-mode hmac_sha1"
+    [[ "$TUNNEL_MODE" == "faketcp" ]] && EXEC_CMD+=" --seq-mode 2"
   else
     red "Invalid selection"; exit 1
   fi
