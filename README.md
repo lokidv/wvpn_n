@@ -102,20 +102,9 @@ rm /home/wvpn/wireguard-install.sh  && wget https://github.com/lokidv/wvpn/raw/m
 export VISUAL=nano; crontab -e
 crontab -e
 * * * * * /bin/systemctl is-active --quiet udp2raw.service || /bin/systemctl 
-or
 
 
 
-```
-for crontab
-
-```
-export VISUAL=nano; crontab -e
-
-* 12 * * * reboot
-
-
-```
 
 for transfer
 ```
