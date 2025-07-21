@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 WVPN_DIR="/home/wvpn"
 SERVICE_NAME="wvpn"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-REPO_URL="https://github.com/yourusername/wvpn-git.git"  # Replace with your actual repo URL
+REPO_URL="https://github.com/lokidv/wvpn_n.git"
 
 # Function to print colored output
 print_status() {
@@ -109,31 +109,78 @@ install_npm_packages() {
     print_success "NPM packages installed successfully"
 }
 
-# Function to create wvpn directory and copy files
+# Function to clone from GitHub and setup wvpn files
 setup_wvpn_files() {
     print_status "Setting up wvpn files..."
     
-    # Create wvpn directory if it doesn't exist
-    mkdir -p "$WVPN_DIR"
-    
-    # If this script is being run from the wvpn directory, copy files
+    # If this script is run remotely, clone from GitHub
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     
-    if [ -f "$SCRIPT_DIR/main.js" ]; then
-        print_status "Copying wvpn files..."
+    if [ ! -f "$SCRIPT_DIR/main.js" ]; then
+        print_status "Cloning wvpn from GitHub..."
+        
+        # Install git if not present
+        if ! command -v git &> /dev/null; then
+            print_status "Installing git..."
+            apt-get update
+            apt-get install -y git
+        fi
+        
+        # Create temporary directory for cloning
+        TEMP_DIR="/tmp/wvpn_install_$(date +%s)"
+        mkdir -p "$TEMP_DIR"
+        
+        # Clone the repository
+        git clone "$REPO_URL" "$TEMP_DIR"
+        
+        # Find the actual directory name after cloning
+        CLONED_DIR=$(find "$TEMP_DIR" -maxdepth 1 -type d -name "*" ! -path "$TEMP_DIR" | head -1)
+        
+        if [ -z "$CLONED_DIR" ]; then
+            print_error "Failed to find cloned directory"
+            rm -rf "$TEMP_DIR"
+            exit 1
+        fi
+        
+        print_status "Found cloned directory: $CLONED_DIR"
+        
+        # Copy files from cloned directory to /home/wvpn
+        print_status "Copying files to $WVPN_DIR..."
+        
+        # Remove old installation if exists
+        if [ -d "$WVPN_DIR" ]; then
+            print_status "Removing old wvpn installation..."
+            rm -rf "$WVPN_DIR"
+        fi
+        
+        # Create wvpn directory
+        mkdir -p "$WVPN_DIR"
+        
+        # Copy all files from cloned directory
+        cp -r "$CLONED_DIR"/* "$WVPN_DIR/"
+        
+        # Clean up temporary directory
+        rm -rf "$TEMP_DIR"
+        
+        print_success "Files cloned and copied successfully"
+    else
+        print_status "Running from local directory, copying files..."
+        
+        # Create wvpn directory if it doesn't exist
+        mkdir -p "$WVPN_DIR"
+        
+        # Copy files from current directory
         cp "$SCRIPT_DIR/main.js" "$WVPN_DIR/"
         
         # Copy other necessary files if they exist
         [ -f "$SCRIPT_DIR/package.json" ] && cp "$SCRIPT_DIR/package.json" "$WVPN_DIR/"
         
         print_success "Files copied successfully"
-    else
-        print_warning "main.js not found in script directory. Please ensure wvpn files are in place."
     fi
     
     # Set proper permissions
     chown -R root:root "$WVPN_DIR"
-    chmod +x "$WVPN_DIR/main.js"
+    chmod +x "$WVPN_DIR/main.js" 2>/dev/null || true
 }
 
 # Function to create systemd service
