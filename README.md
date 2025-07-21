@@ -57,7 +57,7 @@ WantedBy=multi-user.target
 ```
 ```
 systemctl enable --now wvpn.service 
-systemcctl status wvpn.service
+systemctl status wvpn.service
 
 when you want to restart
 
