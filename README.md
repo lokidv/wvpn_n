@@ -3,12 +3,12 @@
 recommand
 wget https://raw.githubusercontent.com/lokidv/wvpn/refs/heads/main/install_wire.sh && sudo chmod +x install_wire.sh && sudo ./install_wire.sh
 wget https://raw.githubusercontent.com/lokidv/wvpn/refs/heads/main/tun.sh && sudo chmod +x tun.sh && sudo ./tun.sh
-sudo apt update && apt upgrade -y
+sudo apt update && sudo apt upgrade -y
 
 
 
 
-sudo apt-get update
+
 sudo apt-get install -y ca-certificates curl gnupg
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
@@ -62,8 +62,7 @@ rm /home/wvpn/wireguard-install.sh  && wget https://github.com/lokidv/wvpn/raw/m
 or
 
 
-pm2 start main.js
-pm2 list
+
 ```
 for crontab
 
