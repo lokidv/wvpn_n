@@ -63,15 +63,10 @@ when you want to restart
 
 systemctl restart wvpn.service
 
-you should upload install file to server
 
-nano install.sh
-
-chmod +x install.sh
-./install.sh
 nano /etc/sysctl.d/99-sysctl.conf
 rm /home/wvpn/wireguard-install.sh  && wget https://github.com/lokidv/wvpn/raw/main/wireguard-install.sh -O /home/wvpn/wireguard-install.sh && chmod +x /home/wvpn/wireguard-install.sh && sudo systemctl restart wvpn.service
-* * * * * /bin/systemctl is-active --quiet udp2raw.service || /bin/systemctl restart udp2raw.service
+* * * * * /bin/systemctl is-active --quiet udp2raw.service || /bin/systemctl 
 or
 
 
