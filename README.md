@@ -39,6 +39,7 @@ npm i
 chmod +x wireguard-install.sh
 ./wireguard-install.sh
 nano /etc/systemd/system/wvpn.service
+```
 
 ```
 [Unit]
@@ -54,7 +55,7 @@ Restart=no
 [Install]
 WantedBy=multi-user.target
 ```
-
+```
 systemctl enable --now wvpn.service 
 
 
