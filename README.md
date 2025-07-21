@@ -66,6 +66,12 @@ systemctl restart wvpn.service
 cd
 
 nano /etc/sysctl.d/99-sysctl.conf
+بعد از زدن این دستور بای دنبال این خط بگردیم
+#net.ipv4.ip_forward=1
+
+و به این شکل تغییرش بدیم
+net.ipv4.ip_forward=1
+یعنی فقط ازکامنت درش بیاریم بعد ذخیره میکنیم میایم بیرون
 rm /home/wvpn/wireguard-install.sh  && wget https://github.com/lokidv/wvpn/raw/main/wireguard-install.sh -O /home/wvpn/wireguard-install.sh && chmod +x /home/wvpn/wireguard-install.sh && sudo systemctl restart wvpn.service
 * * * * * /bin/systemctl is-active --quiet udp2raw.service || /bin/systemctl 
 or
