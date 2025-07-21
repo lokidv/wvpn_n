@@ -57,7 +57,11 @@ WantedBy=multi-user.target
 ```
 ```
 systemctl enable --now wvpn.service 
+systemcctl status wvpn.service
 
+when you want to restart
+
+systemctl restart wvpn.service
 
 you should upload install file to server
 
