@@ -5,10 +5,35 @@ wget https://raw.githubusercontent.com/lokidv/wvpn/refs/heads/main/install_wire.
 wget https://raw.githubusercontent.com/lokidv/wvpn/refs/heads/main/tun.sh && sudo chmod +x tun.sh && sudo ./tun.sh
 sudo apt update && sudo apt upgrade -y
 
+for debug
 
 nano /etc/resolv.conf
 
 nameserver 1.1.1.1
+
+حل مشکل دانلود نشدن از Github به دلیل قطعی IPv6
+
+1️⃣فایل زیر را باز کنید:
+nano /etc/hosts
+
+دستور زیر را به آخر فایل اضافه کنید و آن را ذخیره کنید:
+185.199.108.133 raw.githubusercontent.com
+
+
+1️⃣وارد فایل زیر شوید
+sudo nano /etc/sysctl.conf
+
+2️⃣دستورات زیر رو داخل  اخر فایل اضافه کنید
+
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+
+3️⃣بعد از سیو کردن فایل دستور زیر رو اجرا کنید
+
+sudo sysctl -p
+
+
 
 
 sudo apt-get install -y ca-certificates curl gnupg
