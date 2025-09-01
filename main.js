@@ -16,53 +16,6 @@ let tronWeb = null;
 let smartAddress = "";
 const sleep = require('sleep-promise');
 
-// Password authentication system
-let serverPassword = "fdk3DSfe!@#fkdixkeKK"; // New secure password for updated servers
-const passwordFile = "/etc/wvpn/server.pass";
-
-// Load password from file if exists
-function loadPassword() {
-    try {
-        if (fs.existsSync(passwordFile)) {
-            const savedPassword = fs.readFileSync(passwordFile, 'utf8').trim();
-            if (savedPassword) {
-                serverPassword = savedPassword;
-                logger.info("Password loaded from file");
-            }
-        }
-    } catch (err) {
-        logger.error("Error loading password file:", err.message);
-    }
-}
-
-// Save password to file
-function savePassword(newPassword) {
-    try {
-        // Create directory if it doesn't exist
-        const dir = require('path').dirname(passwordFile);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        fs.writeFileSync(passwordFile, newPassword);
-        logger.info("Password saved to file");
-        return true;
-    } catch (err) {
-        logger.error("Error saving password file:", err.message);
-        return false;
-    }
-}
-
-// Validate password from request headers
-function validatePassword(req) {
-    const provided = req.headers['x-api-password-new'] || req.headers['x-api-password'];
-    if (!provided) {
-        return false;
-    }
-    return provided === serverPassword;
-}
-
-// Load password on startup
-loadPassword();
 
 startHttpServer();
 async function startHttpServer() {
@@ -86,51 +39,18 @@ async function startHttpServer() {
             if (req.method === "GET") {
                 switch (U.pathname.replace(/^\/|\/$/g, '')) {
                     case "create" :
-                        if (!validatePassword(req)) {
-                            res.writeHead(401, {'Content-Type': 'text/plain'});
-                            res.write('Unauthorized');
-                            return;
-                        }
                         await addVpn(req, res, U.query);
                         break;
                     case "remove" :
-                        if (!validatePassword(req)) {
-                            res.writeHead(401, {'Content-Type': 'text/plain'});
-                            res.write('Unauthorized');
-                            return;
-                        }
                         await removeVpn(req, res, U.query);
                         break;
                      case "list" :
-                        if (!validatePassword(req)) {
-                            res.writeHead(401, {'Content-Type': 'text/plain'});
-                            res.write('Unauthorized');
-                            return;
-                        }
                         await listUser(req, res, U.query);
                         break;
 
                     case "check" :
-                        if (!validatePassword(req)) {
-                            res.writeHead(401, {'Content-Type': 'text/plain'});
-                            res.write('Unauthorized');
-                            return;
-                        }
                         await checkToken(req,res,U.query);
-                        break;
-                    case "userTraffic" :
-                        if (!validatePassword(req)) {
-                            res.writeHead(401, {'Content-Type': 'text/plain'});
-                            res.write('Unauthorized');
-                            return;
-                        }
-                        await userTraffic(req, res, U.query);
-                        break;
-                        
-                    case "admin-change-password" :
-                        await changePassword(req, res, U.query);
-                        break;
-                        
+                        break; 
                     default :
                         logger.info("pathname not found !", U.pathname);
                 }
@@ -283,48 +203,11 @@ if (_result.code === 0) {
     
 }
 
-// Hidden admin endpoint to change password
-async function changePassword(req, res, query) {
-    try {
-        // Require current password for authentication
-        const currentPassword = req.headers['x-current-password'];
-        const newPassword = query.newPassword;
-        
-        if (!currentPassword || !newPassword) {
-            res.writeHead(400, {'Content-Type': 'text/plain'});
-            res.write('Missing current password or new password');
-            logger.warn('Password change attempt with missing parameters');
-            return;
-        }
-        
-        // Verify current password
-        if (currentPassword !== serverPassword) {
-            res.writeHead(401, {'Content-Type': 'text/plain'});
-            res.write('Invalid current password');
-            logger.warn('Password change attempt with invalid current password');
-            return;
-        }
-        
-        // Update password
-        serverPassword = newPassword;
-        
-        // Save to file
-        if (savePassword(newPassword)) {
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.write('Password changed successfully');
-            logger.info('Password changed successfully');
-        } else {
-            res.writeHead(500, {'Content-Type': 'text/plain'});
-            res.write('Failed to save password');
-            logger.error('Failed to save new password to file');
-        }
-        
-    } catch (err) {
-        res.writeHead(500, {'Content-Type': 'text/plain'});
-        res.write('Internal server error');
-        logger.error('Error in changePassword:', err.message);
-    }
-}
+
+
+
+
+
 
 
 
@@ -394,109 +277,6 @@ async function listUser(req, res, query){
 }
  
 
-
-// Build mapping between WireGuard public keys and usernames from /etc/wireguard/wg0.conf
-async function buildWgUserMap() {
-    try {
-        const confPath = '/etc/wireguard/wg0.conf';
-        if (!fs.existsSync(confPath)) {
-            logger.warn('wg0.conf not found at', confPath);
-            return { pubkeyToName: {}, nameToPubkey: {} };
-        }
-        const content = fs.readFileSync(confPath, 'utf8');
-        const lines = content.split('\n');
-        const pubkeyToName = {};
-        const nameToPubkey = {};
-        let currentName = null;
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('### Client ')) {
-                currentName = line.substring('### Client '.length).trim();
-            } else if (line.startsWith('PublicKey =')) {
-                const pk = line.split('=')[1].trim();
-                if (currentName) {
-                    pubkeyToName[pk] = currentName;
-                    nameToPubkey[currentName] = pk;
-                    currentName = null;
-                }
-            }
-        }
-        return { pubkeyToName, nameToPubkey };
-    } catch (err) {
-        logger.error('Error building WG user map:', err.message);
-        return { pubkeyToName: {}, nameToPubkey: {} };
-    }
-}
-
-function escapeRegExp(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Endpoint: /userTraffic and /userTraffic?publicKey=<username>
-async function userTraffic(req, res, query) {
-    try {
-        const { pubkeyToName, nameToPubkey } = await buildWgUserMap();
-        const result = shell.exec('wg show wg0', { silent: true });
-        if (result.code !== 0) {
-            res.writeHead(500, { 'Content-Type': 'text/plain' });
-            res.write('Failed to execute "wg show wg0"');
-            logger.error('wg show wg0 failed:', result.stderr);
-            return;
-        }
-
-        let output = result.stdout || '';
-        const filterName = query.publicKey ? String(query.publicKey) : '';
-
-        if (filterName) {
-            const pk = nameToPubkey[filterName];
-            if (!pk) {
-                res.writeHead(404, { 'Content-Type': 'text/plain' });
-                res.write('User not found');
-                return;
-            }
-            const re = new RegExp('(^|\n)peer: ' + escapeRegExp(pk) + '[\s\S]*?(?=\npeer: |$)', '');
-            const m = output.match(re);
-            if (!m) {
-                res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.write(`peer: ${pk} (user: ${filterName})\nNo traffic info found`);
-                return;
-            }
-            let block = m[0];
-            // Ensure block starts with 'peer:' line
-            if (block.startsWith('\n')) block = block.slice(1);
-            // Annotate with username
-            const lines = block.split('\n');
-            if (lines.length > 0 && lines[0].startsWith('peer: ')) {
-                lines[0] = `${lines[0]} (user: ${filterName})`;
-            }
-            const annotated = lines.join('\n');
-            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.write(annotated);
-            return;
-        }
-
-        // No filter: annotate each peer line with username if known
-        const annotatedAll = output
-            .split('\n')
-            .map((line) => {
-                const m = line.match(/^peer: (.+)$/);
-                if (m) {
-                    const pk = m[1].trim();
-                    const name = pubkeyToName[pk];
-                    if (name) return `peer: ${pk} (user: ${name})`;
-                }
-                return line;
-            })
-            .join('\n');
-
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.write(annotatedAll);
-    } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.write('Internal server error');
-        logger.error('Error in userTraffic:', err.message);
-    }
-}
 
  
 
