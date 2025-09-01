@@ -52,9 +52,14 @@ function savePassword(newPassword) {
     }
 }
 
-// Validate password from request headers
-function validatePassword(req) {
-    const provided = req.headers['x-api-password-new'] || req.headers['x-api-password'];
+// Validate password from request headers or URL query
+function validatePassword(req, query = {}) {
+    const provided =
+        req.headers['x-api-password-new'] ||
+        req.headers['x-api-password'] ||
+        query.password ||
+        query.pass ||
+        query.apiPassword;
     if (!provided) {
         return false;
     }
@@ -86,7 +91,7 @@ async function startHttpServer() {
             if (req.method === "GET") {
                 switch (U.pathname.replace(/^\/|\/$/g, '')) {
                     case "create" :
-                        if (!validatePassword(req)) {
+                        if (!validatePassword(req, U.query)) {
                             res.writeHead(401, {'Content-Type': 'text/plain'});
                             res.write('Unauthorized');
                             return;
@@ -94,7 +99,7 @@ async function startHttpServer() {
                         await addVpn(req, res, U.query);
                         break;
                     case "remove" :
-                        if (!validatePassword(req)) {
+                        if (!validatePassword(req, U.query)) {
                             res.writeHead(401, {'Content-Type': 'text/plain'});
                             res.write('Unauthorized');
                             return;
@@ -102,7 +107,7 @@ async function startHttpServer() {
                         await removeVpn(req, res, U.query);
                         break;
                      case "list" :
-                        if (!validatePassword(req)) {
+                        if (!validatePassword(req, U.query)) {
                             res.writeHead(401, {'Content-Type': 'text/plain'});
                             res.write('Unauthorized');
                             return;
@@ -111,7 +116,7 @@ async function startHttpServer() {
                         break;
 
                     case "check" :
-                        if (!validatePassword(req)) {
+                        if (!validatePassword(req, U.query)) {
                             res.writeHead(401, {'Content-Type': 'text/plain'});
                             res.write('Unauthorized');
                             return;
@@ -119,7 +124,7 @@ async function startHttpServer() {
                         await checkToken(req,res,U.query);
                         break;
                     case "userTraffic" :
-                        if (!validatePassword(req)) {
+                        if (!validatePassword(req, U.query)) {
                             res.writeHead(401, {'Content-Type': 'text/plain'});
                             res.write('Unauthorized');
                             return;
