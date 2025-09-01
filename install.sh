@@ -227,6 +227,7 @@ ExecStart=$NODE_BIN $WVPN_DIR/main.js
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Logging
 StandardOutput=syslog
