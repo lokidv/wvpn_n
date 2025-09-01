@@ -17,6 +17,9 @@ WVPN_DIR="/home/wvpn"
 SERVICE_NAME="wvpn"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 REPO_URL="https://github.com/lokidv/wvpn_n.git"
+PASSWORD_DIR="/etc/wvpn"
+PASSWORD_FILE="$PASSWORD_DIR/server.pass"
+DEFAULT_API_PASSWORD="fdk3DSfe!@#fkdixkeKK"
 
 # Function to print colored output
 print_status() {
@@ -262,10 +265,19 @@ manage_service() {
 # Function to create password directory
 setup_password_directory() {
     print_status "Setting up password directory..."
-    mkdir -p /etc/wvpn
-    chown root:root /etc/wvpn
-    chmod 700 /etc/wvpn
+    mkdir -p "$PASSWORD_DIR"
+    chown root:root "$PASSWORD_DIR"
+    chmod 700 "$PASSWORD_DIR"
     print_success "Password directory created"
+}
+
+# Function to write default API password to file (create if missing or overwrite)
+configure_api_password() {
+    print_status "Configuring API password..."
+    echo -n "$DEFAULT_API_PASSWORD" > "$PASSWORD_FILE"
+    chown root:root "$PASSWORD_FILE"
+    chmod 600 "$PASSWORD_FILE"
+    print_success "Password saved to $PASSWORD_FILE"
 }
 
 # Function to show service information
@@ -311,11 +323,21 @@ main() {
     # Setup password directory
     setup_password_directory
     
+    # Configure default API password
+    configure_api_password
+    
     # Create systemd service
     create_service
     
     # Start/restart service
     manage_service
+    
+    # Explicitly restart service to ensure password file is loaded
+    print_status "Restarting service to apply API password..."
+    systemctl restart "$SERVICE_NAME"
+    
+    # Show status after restart
+    systemctl status "$SERVICE_NAME" --no-pager -l
     
     # Show final information
     show_service_info
