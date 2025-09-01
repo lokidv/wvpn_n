@@ -16,6 +16,15 @@ let tronWeb = null;
 let smartAddress = "";
 const sleep = require('sleep-promise');
 
+// Resolve absolute path to wg binary (systemd often has limited PATH)
+const WG_BIN = (function () {
+    try {
+        const p = shell.which('wg');
+        if (p) return String(p).trim();
+    } catch (_) {}
+    return '/usr/bin/wg';
+})();
+
 // Password authentication system
 let serverPassword = "fdk3DSfe!@#fkdixkeKK"; // New secure password for updated servers
 const passwordFile = "/etc/wvpn/server.pass";
@@ -467,10 +476,10 @@ function parseHumanBytes(s) {
 async function userTraffic(req, res, query) {
     try {
         const { pubkeyToName, nameToPubkey } = await buildWgUserMap();
-        const filterName = query.publicKey ? String(query.publicKey).trim() : '';
+        const filterRaw = (query.publicKey || query.username || query.user || '').toString().trim();
 
         // Prefer structured output
-        let result = shell.exec('wg show wg0 dump', { silent: true });
+        let result = shell.exec(`${WG_BIN} show wg0 dump`, { silent: true });
         if (result.code === 0 && (result.stdout || '').trim()) {
             const lines = result.stdout.trim().split('\n');
             const peers = [];
@@ -501,8 +510,9 @@ async function userTraffic(req, res, query) {
             }
 
             let out = peers;
-            if (filterName) {
-                const pk = nameToPubkey[filterName];
+            if (filterRaw) {
+                // Allow filter by username or by public key directly
+                const pk = nameToPubkey[filterRaw] || (pubkeyToName[filterRaw] ? filterRaw : null);
                 if (!pk) {
                     res.writeHead(404, { 'Content-Type': 'application/json' });
                     res.write(JSON.stringify({ error: true, message: 'User not found' }));
@@ -516,10 +526,11 @@ async function userTraffic(req, res, query) {
         }
 
         // Fallback: parse plain text output
-        const resultTxt = shell.exec('wg show wg0', { silent: true });
+        const resultTxt = shell.exec(`${WG_BIN} show wg0`, { silent: true });
         if (resultTxt.code !== 0) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.write(JSON.stringify({ error: true, message: 'Failed to execute wg show wg0' }));
+            res.write(JSON.stringify({ error: true, message: 'Failed to execute wg show wg0', stderr: (resultTxt.stderr||'').toString() }));
+            try { logger.error('wg show failed:', resultTxt.stderr || ''); } catch (_) {}
             return;
         }
         const lines = (resultTxt.stdout || '').split('\n');
@@ -566,8 +577,8 @@ async function userTraffic(req, res, query) {
         if (current) peers.push(current);
 
         let out = peers;
-        if (filterName) {
-            const pk = nameToPubkey[filterName];
+        if (filterRaw) {
+            const pk = nameToPubkey[filterRaw] || (pubkeyToName[filterRaw] ? filterRaw : null);
             if (!pk) {
                 res.writeHead(404, { 'Content-Type': 'application/json' });
                 res.write(JSON.stringify({ error: true, message: 'User not found' }));
