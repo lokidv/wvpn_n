@@ -442,68 +442,144 @@ function escapeRegExp(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Humanize bytes
+function humanBytes(bytes) {
+    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    let i = 0;
+    let n = Number(bytes) || 0;
+    while (n >= 1024 && i < units.length - 1) {
+        n /= 1024;
+        i++;
+    }
+    return `${n.toFixed(n < 10 && i > 0 ? 2 : 0)} ${units[i]}`;
+}
+
+function parseHumanBytes(s) {
+    const m = String(s).trim().match(/^([0-9]+(?:\.[0-9]+)?)\s*(B|KiB|MiB|GiB|TiB)$/i);
+    if (!m) return null;
+    const value = parseFloat(m[1]);
+    const unit = m[2].toLowerCase();
+    const map = { b: 1, kib: 1024, mib: 1024 ** 2, gib: 1024 ** 3, tib: 1024 ** 4 };
+    return Math.round(value * (map[unit] || 1));
+}
+
 // Endpoint: /userTraffic and /userTraffic?publicKey=<username>
 async function userTraffic(req, res, query) {
     try {
         const { pubkeyToName, nameToPubkey } = await buildWgUserMap();
-        const result = shell.exec('wg show wg0', { silent: true });
-        if (result.code !== 0) {
-            res.writeHead(500, { 'Content-Type': 'text/plain' });
-            res.write('Failed to execute "wg show wg0"');
-            logger.error('wg show wg0 failed:', result.stderr);
+        const filterName = query.publicKey ? String(query.publicKey).trim() : '';
+
+        // Prefer structured output
+        let result = shell.exec('wg show wg0 dump', { silent: true });
+        if (result.code === 0 && (result.stdout || '').trim()) {
+            const lines = result.stdout.trim().split('\n');
+            const peers = [];
+            // First line is interface; subsequent lines are peers
+            for (let i = 1; i < lines.length; i++) {
+                const parts = lines[i].split('\t');
+                if (parts.length < 8) continue;
+                const pk = parts[0];
+                const endpoint = parts[2] || '';
+                const allowed = parts[3] || '';
+                const hs = parseInt(parts[4], 10) || 0; // unix ts
+                const rx = parseInt(parts[5], 10) || 0; // bytes
+                const tx = parseInt(parts[6], 10) || 0; // bytes
+                const username = pubkeyToName[pk] || null;
+                const obj = {
+                    publicKey: pk,
+                    username,
+                    endpoint: endpoint || null,
+                    allowedIPs: allowed ? allowed.split(',').filter(Boolean) : [],
+                    latestHandshakeUnix: hs > 0 ? hs : null,
+                    latestHandshake: hs > 0 ? new Date(hs * 1000).toISOString() : null,
+                    transferRxBytes: rx,
+                    transferTxBytes: tx,
+                    transferRxHuman: humanBytes(rx),
+                    transferTxHuman: humanBytes(tx)
+                };
+                peers.push(obj);
+            }
+
+            let out = peers;
+            if (filterName) {
+                const pk = nameToPubkey[filterName];
+                if (!pk) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.write(JSON.stringify({ error: true, message: 'User not found' }));
+                    return;
+                }
+                out = peers.filter(p => p.publicKey === pk);
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.write(JSON.stringify(out, null, 2));
             return;
         }
 
-        let output = result.stdout || '';
-        const filterName = query.publicKey ? String(query.publicKey) : '';
+        // Fallback: parse plain text output
+        const resultTxt = shell.exec('wg show wg0', { silent: true });
+        if (resultTxt.code !== 0) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.write(JSON.stringify({ error: true, message: 'Failed to execute wg show wg0' }));
+            return;
+        }
+        const lines = (resultTxt.stdout || '').split('\n');
+        const peers = [];
+        let current = null;
+        for (const lineRaw of lines) {
+            const line = lineRaw.trim();
+            if (line.startsWith('peer: ')) {
+                if (current) peers.push(current);
+                const pk = line.slice('peer: '.length).trim();
+                current = {
+                    publicKey: pk,
+                    username: pubkeyToName[pk] || null,
+                    endpoint: null,
+                    allowedIPs: [],
+                    latestHandshake: null,
+                    latestHandshakeUnix: null,
+                    transferRxBytes: null,
+                    transferTxBytes: null,
+                    transferRxHuman: null,
+                    transferTxHuman: null
+                };
+            } else if (current && line.startsWith('endpoint: ')) {
+                current.endpoint = line.slice('endpoint: '.length).trim();
+            } else if (current && line.startsWith('allowed ips: ')) {
+                const allowed = line.slice('allowed ips: '.length).trim();
+                current.allowedIPs = allowed ? allowed.split(',').map(s => s.trim()) : [];
+            } else if (current && line.startsWith('latest handshake: ')) {
+                // Text form like: "20 seconds ago" or "(none)"
+                current.latestHandshake = line.slice('latest handshake: '.length).trim();
+            } else if (current && line.startsWith('transfer: ')) {
+                // Example: transfer: 595.55 KiB received, 2.38 MiB sent
+                const m = line.slice('transfer: '.length).trim().match(/([^,]+) received,\s*(.+) sent/);
+                if (m) {
+                    current.transferRxHuman = m[1].trim();
+                    current.transferTxHuman = m[2].trim();
+                    const rxB = parseHumanBytes(current.transferRxHuman);
+                    const txB = parseHumanBytes(current.transferTxHuman);
+                    current.transferRxBytes = rxB;
+                    current.transferTxBytes = txB;
+                }
+            }
+        }
+        if (current) peers.push(current);
 
+        let out = peers;
         if (filterName) {
             const pk = nameToPubkey[filterName];
             if (!pk) {
-                res.writeHead(404, { 'Content-Type': 'text/plain' });
-                res.write('User not found');
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.write(JSON.stringify({ error: true, message: 'User not found' }));
                 return;
             }
-            const re = new RegExp('(^|\n)peer: ' + escapeRegExp(pk) + '[\s\S]*?(?=\npeer: |$)', '');
-            const m = output.match(re);
-            if (!m) {
-                res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-                res.write(`peer: ${pk} (user: ${filterName})\nNo traffic info found`);
-                return;
-            }
-            let block = m[0];
-            // Ensure block starts with 'peer:' line
-            if (block.startsWith('\n')) block = block.slice(1);
-            // Annotate with username
-            const lines = block.split('\n');
-            if (lines.length > 0 && lines[0].startsWith('peer: ')) {
-                lines[0] = `${lines[0]} (user: ${filterName})`;
-            }
-            const annotated = lines.join('\n');
-            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.write(annotated);
-            return;
+            out = peers.filter(p => p.publicKey === pk);
         }
-
-        // No filter: annotate each peer line with username if known
-        const annotatedAll = output
-            .split('\n')
-            .map((line) => {
-                const m = line.match(/^peer: (.+)$/);
-                if (m) {
-                    const pk = m[1].trim();
-                    const name = pubkeyToName[pk];
-                    if (name) return `peer: ${pk} (user: ${name})`;
-                }
-                return line;
-            })
-            .join('\n');
-
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.write(annotatedAll);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.write(JSON.stringify(out, null, 2));
     } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.write('Internal server error');
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.write(JSON.stringify({ error: true, message: 'Internal server error' }));
         logger.error('Error in userTraffic:', err.message);
     }
 }
