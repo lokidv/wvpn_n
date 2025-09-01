@@ -428,18 +428,27 @@ async function buildWgUserMap() {
         const nameToPubkey = {};
         let currentName = null;
         for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('### Client ')) {
-                currentName = line.substring('### Client '.length).trim();
-            } else if (line.startsWith('PublicKey =')) {
-                const pk = line.split('=')[1].trim();
-                if (currentName) {
+            const raw = lines[i];
+            if (!raw) continue;
+            const line = raw.trim();
+            // Match comment like: ### Client name  (allow variations)
+            const mName = line.match(/^#+\s*Client\s+(.+)$/i);
+            if (mName) {
+                currentName = mName[1].trim();
+                continue;
+            }
+            // Match: PublicKey = XXXXX or PublicKey=XXXXX
+            const mKey = line.match(/^PublicKey\s*=\s*(.+)$/i);
+            if (mKey) {
+                const pk = mKey[1].trim();
+                if (pk && currentName) {
                     pubkeyToName[pk] = currentName;
                     nameToPubkey[currentName] = pk;
                     currentName = null;
                 }
             }
         }
+        try { logger.info(`WG map built: ${Object.keys(pubkeyToName).length} peers`); } catch (_) {}
         return { pubkeyToName, nameToPubkey };
     } catch (err) {
         logger.error('Error building WG user map:', err.message);
