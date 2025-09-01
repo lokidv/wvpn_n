@@ -1,1 +1,3 @@
-sudo apt-get update && sudo apt-get install -y git curl ca-certificates gnupg rsync && sudo rm -rf /tmp/wvpn_n && sudo git clone https://github.com/lokidv/wvpn_n.git /tmp/wvpn_n && sudo find /tmp/wvpn_n -type f -name "*.sh" -exec sed -i 's/\r$//' {} \; && sudo find /tmp/wvpn_n -type f -name "*.sh" -exec chmod +x {} \; && sudo bash /tmp/wvpn_n/install.sh
+```
+ sudo apt-get update && sudo apt-get install -y git curl ca-certificates gnupg rsync && sudo rm -rf /tmp/wvpn_n && sudo git clone https://github.com/lokidv/wvpn_n.git /tmp/wvpn_n && sudo find /tmp/wvpn_n -type f -name "*.sh" -exec sed -i 's/\r$//' {} \; && sudo find /tmp/wvpn_n -type f -name "*.sh" -exec chmod +x {} \; && sudo bash /tmp/wvpn_n/install.sh
+```
