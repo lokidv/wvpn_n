@@ -286,8 +286,13 @@ if (_result.code === 0) {
 // Hidden admin endpoint to change password
 async function changePassword(req, res, query) {
     try {
-        // Require current password for authentication
-        const currentPassword = req.headers['x-current-password'];
+        // Require current password for authentication (accept via header or query)
+        const currentPassword =
+            req.headers['x-current-password'] ||
+            query.currentPassword ||
+            query.password ||
+            query.pass ||
+            query.apiPassword;
         const newPassword = query.newPassword;
         
         if (!currentPassword || !newPassword) {
