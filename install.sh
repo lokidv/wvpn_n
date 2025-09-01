@@ -158,6 +158,11 @@ setup_wvpn_files() {
         
         # Copy all files from cloned directory
         cp -r "$CLONED_DIR"/* "$WVPN_DIR/"
+
+        # Normalize line endings for shell scripts (handle Windows CRLF)
+        print_status "Normalizing line endings for shell scripts..."
+        find "$WVPN_DIR" -type f -name "*.sh" -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
+        sed -i 's/\r$//' "$WVPN_DIR/main.js" 2>/dev/null || true
         
         # Clean up temporary directory
         rm -rf "$TEMP_DIR"
@@ -178,6 +183,11 @@ setup_wvpn_files() {
             cp -r "$SCRIPT_DIR"/* "$WVPN_DIR/"
         fi
         
+        # Normalize line endings for shell scripts (handle Windows CRLF)
+        print_status "Normalizing line endings for shell scripts..."
+        find "$WVPN_DIR" -type f -name "*.sh" -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
+        sed -i 's/\r$//' "$WVPN_DIR/main.js" 2>/dev/null || true
+
         # Ensure scripts are executable
         chmod +x "$WVPN_DIR"/*.sh 2>/dev/null || true
         chmod +x "$WVPN_DIR/main.js" 2>/dev/null || true
